@@ -59,11 +59,11 @@ export const TopNav: React.FC<TopNavProps> = ({
     <header className="h-11 bg-[#1e1e1e] border-b border-[#333333] flex items-center justify-between gap-8 px-4 text-xs select-none shrink-0 z-20">
       {/* Zone 1: Single text element wordmark */}
       <div className="flex items-center gap-2.5 whitespace-nowrap shrink-0">
-        <div className="w-6 h-6 rounded bg-[#007fd4] flex items-center justify-center text-white shadow-sm">
-          <Code2 className="w-3.5 h-3.5" />
+        <div className="w-6 h-6 rounded bg-[#007fd4] flex items-center justify-center text-white shadow-sm font-bold text-xs">
+          EG
         </div>
         <span className="text-sm font-bold tracking-tight text-white">
-          Monaco Web IDE
+          EG WebIDE
         </span>
         <span className="text-[11px] text-[#858585] border-l border-[#333333] pl-2 font-mono">
           {currentTemplate.title}

@@ -7,7 +7,8 @@ import {
   Trash2, 
   Edit3, 
   Download,
-  RotateCw
+  RotateCw,
+  UploadCloud
 } from 'lucide-react';
 import { FileNode } from '../../types/ide';
 import { FileIcon } from './FileIcons';
@@ -22,6 +23,7 @@ interface FileExplorerProps {
   onDeleteNode: (nodeId: string) => void;
   onDownloadFile: (nodeId: string) => void;
   onResetProject: () => void;
+  onDropExternalFiles: (files: FileList | File[], targetParentId?: string) => void;
 }
 
 export const FileExplorer: React.FC<FileExplorerProps> = ({
@@ -33,13 +35,16 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onRenameNode,
   onDeleteNode,
   onDownloadFile,
-  onResetProject
+  onResetProject,
+  onDropExternalFiles
 }) => {
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [creatingType, setCreatingType] = useState<{ parentId: string; type: 'file' | 'folder' } | null>(null);
   const [newInputName, setNewInputName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [isExplorerDragOver, setIsExplorerDragOver] = useState(false);
+  const [hoveredFolderId, setHoveredFolderId] = useState<string | null>(null);
 
   const toggleFolder = (folderId: string) => {
     setCollapsedFolders(prev => ({
@@ -86,6 +91,34 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     setRenamingId(null);
   };
 
+  // External files drag and drop onto the explorer
+  const handleExplorerDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isExplorerDragOver) setIsExplorerDragOver(true);
+  };
+
+  const handleExplorerDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsExplorerDragOver(false);
+    setHoveredFolderId(null);
+  };
+
+  const handleExplorerDrop = (e: React.DragEvent, targetFolderId: string = 'root') => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsExplorerDragOver(false);
+    setHoveredFolderId(null);
+
+    // If external files from OS are dropped
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onDropExternalFiles(e.dataTransfer.files, targetFolderId);
+    }
+  };
+
   const renderNode = (nodeId: string, depth: number = 0) => {
     const node = files[nodeId];
     if (!node) return null;
@@ -93,11 +126,39 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     const isFolder = node.type === 'folder';
     const isCollapsed = isFolder ? !!collapsedFolders[node.id] : false;
     const isActive = activeFileId === node.id;
+    const isTargetFolder = hoveredFolderId === node.id;
 
     return (
       <div key={node.id} className="select-none text-xs">
         {/* Node Row */}
         <div
+          draggable={!isFolder}
+          onDragStart={(e) => {
+            if (!isFolder) {
+              e.dataTransfer.setData('application/x-monaco-file-id', node.id);
+              e.dataTransfer.setData('text/plain', node.id);
+              e.dataTransfer.effectAllowed = 'copyMove';
+            }
+          }}
+          onDragOver={(e) => {
+            if (isFolder) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = 'copy';
+              if (hoveredFolderId !== node.id) setHoveredFolderId(node.id);
+            }
+          }}
+          onDragLeave={(e) => {
+            if (isFolder) {
+              e.stopPropagation();
+              if (hoveredFolderId === node.id) setHoveredFolderId(null);
+            }
+          }}
+          onDrop={(e) => {
+            if (isFolder) {
+              handleExplorerDrop(e, node.id);
+            }
+          }}
           onClick={() => {
             if (isFolder) {
               toggleFolder(node.id);
@@ -109,6 +170,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           className={`group flex items-center justify-between py-1.5 pr-2 cursor-pointer transition-colors duration-100 ${
             isActive
               ? 'bg-[#094771] text-white font-medium'
+              : isTargetFolder
+              ? 'bg-[#1e3a5f] text-white ring-1 ring-[#007fd4]'
               : 'text-[#cccccc] hover:bg-[#2a2d2e] hover:text-white'
           }`}
         >
@@ -230,7 +293,12 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const rootChildren = files['root']?.children || [];
 
   return (
-    <div className="h-full flex flex-col bg-[#252526] select-none text-[#cccccc]">
+    <div 
+      onDragOver={handleExplorerDragOver}
+      onDragLeave={handleExplorerDragLeave}
+      onDrop={(e) => handleExplorerDrop(e, 'root')}
+      className="h-full flex flex-col bg-[#252526] select-none text-[#cccccc] relative overflow-hidden"
+    >
       {/* Explorer Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#333333]">
         <span className="text-[11px] font-bold tracking-wider uppercase text-[#bbbbbb]">
@@ -300,6 +368,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           rootChildren.map(childId => renderNode(childId, 0))
         )}
       </div>
+
+      {/* External Files Drop Target Overlay */}
+      {isExplorerDragOver && (
+        <div className="absolute inset-0 bg-[#094771]/80 backdrop-blur-xs border-2 border-dashed border-[#58a6ff] flex flex-col items-center justify-center p-4 text-center z-20 pointer-events-none">
+          <UploadCloud className="w-8 h-8 text-[#58a6ff] mb-2 animate-bounce" />
+          <span className="text-xs font-bold text-white">파일을 여기에 놓으세요</span>
+          <span className="text-[11px] text-white/80 mt-0.5">
+            워크스페이스에 추가되고 에디터에서 즉시 열립니다.
+          </span>
+        </div>
+      )}
 
       {/* Bottom workspace info */}
       <div className="px-3 py-2 border-t border-[#333333] text-[11px] text-[#858585] flex items-center justify-between">

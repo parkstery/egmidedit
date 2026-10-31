@@ -521,6 +521,71 @@ export default function App() {
     }
   };
 
+  // Handle dropping external files onto Explorer or Editor
+  const handleImportExternalFiles = async (droppedFiles: FileList | File[], targetParentId: string = 'root') => {
+    const fileArray = Array.from(droppedFiles);
+    if (fileArray.length === 0) return;
+
+    let lastOpenedFileId: string | null = null;
+
+    for (const file of fileArray) {
+      if (file.name.endsWith('.zip')) {
+        await handleImportZip(file);
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        const parent = files[targetParentId] || files['root'];
+        const parentPath = parent && parent.id !== 'root' ? parent.path : '';
+        const newPath = `${parentPath}/${file.name}`;
+        const newId = `file:${newPath}`;
+
+        const newNode: FileNode = {
+          id: newId,
+          name: file.name,
+          path: newPath,
+          type: 'file',
+          content: text,
+          language: getLanguageFromFilename(file.name),
+          parentId: parent ? parent.id : 'root',
+        };
+
+        setFiles(prev => {
+          const pNode = prev[newNode.parentId || 'root'];
+          return {
+            ...prev,
+            [newId]: newNode,
+            [newNode.parentId || 'root']: {
+              ...pNode,
+              children: pNode && pNode.children && !pNode.children.includes(newId) 
+                ? [...pNode.children, newId] 
+                : (pNode?.children || [newId])
+            }
+          };
+        });
+
+        lastOpenedFileId = newId;
+      } catch (err: any) {
+        console.error('Error reading dropped file:', err);
+      }
+    }
+
+    if (lastOpenedFileId) {
+      handleSelectFile(lastOpenedFileId);
+      setLogs(prev => [
+        ...prev,
+        {
+          id: String(Date.now()),
+          level: 'system',
+          message: `📥 파일 ${fileArray.length}개가 워크스페이스에 추가되고 에디터에서 열렸습니다.`,
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      ]);
+      setTimeout(handleRunCode, 150);
+    }
+  };
+
   // Replace text in file
   const handleReplaceInFile = (fileId: string, search: string, replaceWith: string) => {
     setFiles(prev => {
@@ -590,6 +655,7 @@ export default function App() {
                 onDeleteNode={handleDeleteNode}
                 onDownloadFile={handleDownloadFile}
                 onResetProject={handleResetProject}
+                onDropExternalFiles={handleImportExternalFiles}
               />
             )}
             {activeSidebarTab === 'search' && (
@@ -631,6 +697,8 @@ export default function App() {
               onCloseAllTabs={handleCloseAllTabs}
               onFormatDocument={handleFormatDocument}
               onRunCode={handleRunCode}
+              onDropFileId={handleSelectFile}
+              onDropExternalFiles={handleImportExternalFiles}
             />
 
             {/* Breadcrumbs */}
@@ -645,6 +713,8 @@ export default function App() {
                 onSave={handleRunCode}
                 onCursorChange={(line, col) => setCursorPosition({ line, col })}
                 editorRef={editorInstanceRef}
+                onDropFileId={handleSelectFile}
+                onDropExternalFiles={handleImportExternalFiles}
               />
             </div>
 

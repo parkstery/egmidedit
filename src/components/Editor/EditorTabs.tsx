@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Play, Wand2 } from 'lucide-react';
 import { FileNode, OpenTab } from '../../types/ide';
 import { FileIcon } from '../Sidebar/FileIcons';
@@ -12,6 +12,8 @@ interface EditorTabsProps {
   onCloseAllTabs: () => void;
   onFormatDocument: () => void;
   onRunCode: () => void;
+  onDropFileId?: (fileId: string) => void;
+  onDropExternalFiles?: (files: FileList | File[]) => void;
 }
 
 export const EditorTabs: React.FC<EditorTabsProps> = ({
@@ -22,18 +24,66 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
   onCloseTab,
   onCloseAllTabs,
   onFormatDocument,
-  onRunCode
+  onRunCode,
+  onDropFileId,
+  onDropExternalFiles
 }) => {
+  const [isTabDragOver, setIsTabDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isTabDragOver) setIsTabDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsTabDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsTabDragOver(false);
+
+    const fileId = e.dataTransfer.getData('application/x-monaco-file-id') || e.dataTransfer.getData('text/plain');
+    if (fileId && fileId.startsWith('file:') && onDropFileId) {
+      onDropFileId(fileId);
+      return;
+    }
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onDropExternalFiles) {
+      onDropExternalFiles(e.dataTransfer.files);
+    }
+  };
+
   if (openTabs.length === 0) {
     return (
-      <div className="h-9 bg-[#252526] border-b border-[#1e1e1e] flex items-center px-4 text-xs text-[#858585]">
-        열린 탭이 없습니다.
+      <div 
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`h-9 bg-[#252526] border-b border-[#1e1e1e] flex items-center px-4 text-xs transition-colors ${
+          isTabDragOver ? 'bg-[#094771] text-white' : 'text-[#858585]'
+        }`}
+      >
+        {isTabDragOver ? '파일을 여기에 놓아 탭 열기' : '열린 탭이 없습니다. (탐색기에서 파일을 드래그하여 열 수 있습니다)'}
       </div>
     );
   }
 
   return (
-    <div className="h-9 bg-[#252526] border-b border-[#1e1e1e] flex items-center justify-between select-none overflow-hidden">
+    <div 
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`h-9 bg-[#252526] border-b border-[#1e1e1e] flex items-center justify-between select-none overflow-hidden relative ${
+        isTabDragOver ? 'ring-1 ring-[#007fd4] bg-[#1e2a38]' : ''
+      }`}
+    >
       {/* Scrollable Tabs List */}
       <div className="flex items-center overflow-x-auto h-full scrollbar-none flex-1">
         {openTabs.map((tab) => {
